@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../theme/app_theme.dart';
+
+import '../../app_scope.dart';
 import '../../models/models.dart';
-import '../../data/mock_data.dart';
+import '../../theme/app_theme.dart';
 
 class ManagerSchedule extends StatefulWidget {
   const ManagerSchedule({super.key});
@@ -13,51 +14,44 @@ class ManagerSchedule extends StatefulWidget {
 
 class _ManagerScheduleState extends State<ManagerSchedule> {
   late DateTime _weekStart;
-  DateTime? _selectedDay;
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _weekStart = now.subtract(Duration(days: now.weekday - 1));
-  }
-
-  bool _isSameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
-  void _onDayTapped(DateTime day) {
-    final allShifts = mockShifts
-        .where((s) => _isSameDay(s.start, day))
-        .toList()
-      ..sort((a, b) => a.start.compareTo(b.start));
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _DayShiftsSheet(
-        day: day,
-        shifts: allShifts,
-        employees: mockEmployees,
-      ),
-    );
-
-    setState(() => _selectedDay = day);
+    final today = DateTime.now();
+    _weekStart = DateTime(today.year, today.month, today.day)
+        .subtract(Duration(days: today.weekday - 1));
   }
 
   @override
   Widget build(BuildContext context) {
+    final controller = ShiftSyncScope.of(context);
+    final weekShifts = controller.currentTeamShifts
+        .where((shift) =>
+            !shift.start.isBefore(_weekStart) &&
+            shift.start.isBefore(_weekStart.add(const Duration(days: 7))))
+        .toList();
+    final dropRequests = weekShifts
+        .where((shift) => shift.status == ShiftStatus.dropRequested)
+        .toList();
+    final pickupRequests = controller.currentTeamShifts
+        .where((shift) => shift.status == ShiftStatus.pickupPending)
+        .toList();
+
     return Scaffold(
       backgroundColor: AppColors.background,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showShiftEditor(context, controller),
+        label: const Text('Create shift'),
+        icon: const Icon(Icons.add),
+      ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: Row(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
                   const Text('Schedule',
                       style: TextStyle(
@@ -65,501 +59,409 @@ class _ManagerScheduleState extends State<ManagerSchedule> {
                           fontSize: 24,
                           fontWeight: FontWeight.bold)),
                   const Spacer(),
-                  FilledButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Shift',
-                        style: TextStyle(fontSize: 13)),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                    ),
+                  IconButton(
+                    onPressed: () => setState(() => _weekStart =
+                        _weekStart.subtract(const Duration(days: 7))),
+                    icon: const Icon(Icons.chevron_left, color: Colors.white),
+                  ),
+                  Text(
+                    '${DateFormat('MMM d').format(_weekStart)} - ${DateFormat('MMM d').format(_weekStart.add(const Duration(days: 6)))}',
+                    style: const TextStyle(color: AppColors.textSecondary),
+                  ),
+                  IconButton(
+                    onPressed: () => setState(() =>
+                        _weekStart = _weekStart.add(const Duration(days: 7))),
+                    icon: const Icon(Icons.chevron_right, color: Colors.white),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 8),
-            _buildWeekNav(),
-            const SizedBox(height: 8),
-            _buildDayStrip(),
-            const SizedBox(height: 12),
-            Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: mockEmployees.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (_, i) {
-                  final emp = mockEmployees[i];
-                  final empShifts = mockShifts
-                      .where((s) => s.employeeId == emp.id)
-                      .toList();
-                  return _EmployeeRow(
-                      employee: emp,
-                      shifts: empShifts,
-                      weekStart: _weekStart);
-                },
+              const SizedBox(height: 12),
+              if (dropRequests.isNotEmpty || pickupRequests.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: AppColors.cardBorder),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Manager approvals',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      ...dropRequests.map(
+                        (shift) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _ApprovalTile(
+                            title:
+                                '${controller.employeeName(shift.assignedUserId)} requested to drop ${shift.roleName}',
+                            subtitle: _shiftTime(shift),
+                            buttonLabel: 'Approve drop',
+                            onPressed: () =>
+                                controller.approveShiftDrop(shift.id),
+                          ),
+                        ),
+                      ),
+                      ...pickupRequests.map(
+                        (shift) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _ApprovalTile(
+                            title:
+                                '${controller.employeeName(shift.pickupCandidateUserId!)} wants to pick up ${shift.roleName}',
+                            subtitle: _shiftTime(shift),
+                            buttonLabel: 'Approve pickup',
+                            onPressed: () =>
+                                controller.approveShiftPickup(shift.id),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: 7,
+                  itemBuilder: (context, index) {
+                    final day = _weekStart.add(Duration(days: index));
+                    final dayShifts = weekShifts
+                        .where((shift) => _sameDay(shift.start, day))
+                        .toList();
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: AppColors.cardBorder),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(DateFormat('EEEE, MMMM d').format(day),
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 12),
+                            if (dayShifts.isEmpty)
+                              const Text('No scheduled shifts.',
+                                  style:
+                                      TextStyle(color: AppColors.textSecondary))
+                            else
+                              ...dayShifts.map(
+                                (shift) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: _ManagerShiftTile(
+                                    shift: shift,
+                                    employeeName: controller
+                                        .employeeName(shift.assignedUserId),
+                                    onEdit: () => _showShiftEditor(
+                                        context, controller,
+                                        shift: shift),
+                                    onDuplicate: () =>
+                                        controller.duplicateShift(shift.id),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildWeekNav() {
-    final fmt = DateFormat('MMM d');
-    final weekEnd = _weekStart.add(const Duration(days: 6));
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.chevron_left,
-                color: AppColors.textSecondary),
-            onPressed: () => setState(() {
-              _weekStart =
-                  _weekStart.subtract(const Duration(days: 7));
-              _selectedDay = null;
-            }),
-          ),
-          Text(
-            '${fmt.format(_weekStart)} – ${fmt.format(weekEnd)}',
-            style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-                fontWeight: FontWeight.w500),
-          ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right,
-                color: AppColors.textSecondary),
-            onPressed: () => setState(() {
-              _weekStart = _weekStart.add(const Duration(days: 7));
-              _selectedDay = null;
-            }),
-          ),
-          const Spacer(),
-          Text(
-            '${mockShifts.length} shifts scheduled',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-          ),
-        ],
-      ),
+  Future<void> _showShiftEditor(BuildContext context, controller,
+      {WorkShift? shift}) async {
+    final employees = controller.teamUsers
+        .where((user) => user.id != controller.currentUser!.id)
+        .toList();
+    String selectedUserId = shift?.assignedUserId ?? employees.first.id;
+    final roleController =
+        TextEditingController(text: shift?.roleName ?? 'Cashier');
+    final dateController = TextEditingController(
+      text: DateFormat('yyyy-MM-dd')
+          .format(shift?.start ?? DateTime.now().add(const Duration(days: 1))),
     );
-  }
+    final startController = TextEditingController(
+        text: DateFormat('HH:mm').format(shift?.start ?? DateTime.now()));
+    final endController = TextEditingController(
+        text: DateFormat('HH:mm').format(
+            shift?.end ?? DateTime.now().add(const Duration(hours: 8))));
 
-  Widget _buildDayStrip() {
-    const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    final today = DateTime.now();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: List.generate(7, (i) {
-          final day = _weekStart.add(Duration(days: i));
-          final isToday = _isSameDay(day, today);
-          final isSelected =
-              _selectedDay != null && _isSameDay(day, _selectedDay!);
-          final shiftsOnDay =
-              mockShifts.where((s) => _isSameDay(s.start, day)).length;
-
-          return GestureDetector(
-            onTap: () => _onDayTapped(day),
-            child: Container(
-              width: 42,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? AppColors.primary
-                    : isToday
-                        ? AppColors.primary.withValues(alpha: 0.25)
-                        : AppColors.surface,
-                borderRadius: BorderRadius.circular(10),
-                border: isToday && !isSelected
-                    ? Border.all(
-                        color: AppColors.primary.withValues(alpha: 0.6),
-                        width: 1)
-                    : null,
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+              20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(shift == null ? 'Create shift' : 'Edit shift',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: selectedUserId,
+                dropdownColor: AppColors.surfaceVariant,
+                decoration: const InputDecoration(labelText: 'Employee'),
+                items: employees
+                    .map((employee) => DropdownMenuItem(
+                        value: employee.id, child: Text(employee.fullName)))
+                    .toList(),
+                onChanged: (value) => setModalState(
+                    () => selectedUserId = value ?? selectedUserId),
               ),
-              child: Column(
+              const SizedBox(height: 12),
+              TextField(
+                  controller: roleController,
+                  decoration:
+                      const InputDecoration(labelText: 'Role for shift')),
+              const SizedBox(height: 12),
+              TextField(
+                  controller: dateController,
+                  decoration:
+                      const InputDecoration(labelText: 'Date (YYYY-MM-DD)')),
+              const SizedBox(height: 12),
+              Row(
                 children: [
-                  Text(labels[i],
-                      style: TextStyle(
-                          color: isSelected
-                              ? Colors.white
-                              : AppColors.textMuted,
-                          fontSize: 11)),
-                  const SizedBox(height: 2),
-                  Text('${day.day}',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: isSelected || isToday
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          fontSize: 14)),
-                  const SizedBox(height: 3),
-                  // shift count dots
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(
-                      shiftsOnDay.clamp(0, 3),
-                      (_) => Container(
-                        width: 4,
-                        height: 4,
-                        margin: const EdgeInsets.symmetric(horizontal: 1),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Colors.white70
-                              : AppColors.primary,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                  ),
+                  Expanded(
+                      child: TextField(
+                          controller: startController,
+                          decoration: const InputDecoration(
+                              labelText: 'Start (24h HH:MM)'))),
+                  const SizedBox(width: 12),
+                  Expanded(
+                      child: TextField(
+                          controller: endController,
+                          decoration: const InputDecoration(
+                              labelText: 'End (24h HH:MM)'))),
                 ],
               ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-}
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    final start = _parseDateTime(
+                        dateController.text, startController.text);
+                    final end =
+                        _parseDateTime(dateController.text, endController.text);
+                    if (start == null || end == null || !end.isAfter(start)) {
+                      return;
+                    }
 
-// ── Day shifts bottom sheet ───────────────────────────────────────────────────
-
-class _DayShiftsSheet extends StatelessWidget {
-  final DateTime day;
-  final List<Shift> shifts;
-  final List<Employee> employees;
-  const _DayShiftsSheet(
-      {required this.day,
-      required this.shifts,
-      required this.employees});
-
-  Employee? _employee(String id) =>
-      employees.where((e) => e.id == id).firstOrNull;
-
-  @override
-  Widget build(BuildContext context) {
-    final fmt = DateFormat('EEEE, MMMM d');
-    final timeFmt = DateFormat('h:mm a');
-    final now = DateTime.now();
-    final isToday = day.year == now.year &&
-        day.month == now.month &&
-        day.day == now.day;
-    final totalHours =
-        shifts.fold<double>(0, (sum, s) => sum + s.hours);
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-          20, 12, 20, MediaQuery.of(context).viewInsets.bottom + 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Handle bar
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                color: AppColors.cardBorder,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          // Header
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(fmt.format(day),
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold)),
-                    if (isToday)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text('Today',
-                            style: TextStyle(
-                                color: AppColors.primary, fontSize: 13)),
-                      ),
-                  ],
+                    if (shift == null) {
+                      controller.createShift(
+                        userId: selectedUserId,
+                        roleName: roleController.text,
+                        start: start,
+                        end: end,
+                      );
+                    } else {
+                      controller.updateShift(
+                        shiftId: shift.id,
+                        userId: selectedUserId,
+                        roleName: roleController.text,
+                        start: start,
+                        end: end,
+                      );
+                    }
+                    Navigator.pop(context);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    child:
+                        Text(shift == null ? 'Create shift' : 'Save changes'),
+                  ),
                 ),
               ),
-              if (shifts.isNotEmpty)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('${shifts.length} shift${shifts.length > 1 ? 's' : ''}',
-                        style: TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14)),
-                    Text('${totalHours.toStringAsFixed(1)}h total',
-                        style: TextStyle(
-                            color: AppColors.textMuted, fontSize: 12)),
-                  ],
-                ),
             ],
           ),
-          const SizedBox(height: 20),
-          // Shift list
-          if (shifts.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 32),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceVariant,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Column(
-                children: [
-                  Icon(Icons.event_busy_outlined,
-                      color: AppColors.textMuted, size: 36),
-                  const SizedBox(height: 10),
-                  Text('No shifts scheduled',
-                      style: TextStyle(
-                          color: AppColors.textSecondary, fontSize: 15)),
-                ],
-              ),
-            )
-          else
-            ...shifts.map((s) {
-              final emp = _employee(s.employeeId);
-              final totalMins =
-                  s.end.difference(s.start).inMinutes;
-              final hrs = totalMins ~/ 60;
-              final mins = totalMins % 60;
-              final durationLabel =
-                  mins == 0 ? '${hrs}h' : '${hrs}h ${mins}m';
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceVariant,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: AppColors.cardBorder, width: 0.5),
-                ),
-                child: Row(
-                  children: [
-                    // Employee avatar
-                    if (emp != null)
-                      Container(
-                        width: 36,
-                        height: 36,
-                        margin: const EdgeInsets.only(right: 12),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(emp.initials,
-                              style: const TextStyle(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12)),
-                        ),
-                      ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(emp?.name ?? 'Unknown',
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14)),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary
-                                      .withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(s.role,
-                                    style: TextStyle(
-                                        color: AppColors.primary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600)),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${timeFmt.format(s.start)} – ${timeFmt.format(s.end)}',
-                                style: TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 12),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(durationLabel,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15)),
-                  ],
-                ),
-              );
-            }),
-        ],
+        ),
       ),
     );
   }
+
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  DateTime? _parseDateTime(String date, String time) {
+    final parts = date.split('-');
+    final timeParts = time.split(':');
+    if (parts.length != 3 || timeParts.length != 2) {
+      return null;
+    }
+
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    final hour = int.tryParse(timeParts[0]);
+    final minute = int.tryParse(timeParts[1]);
+    if ([year, month, day, hour, minute].contains(null)) {
+      return null;
+    }
+
+    return DateTime(year!, month!, day!, hour!, minute!);
+  }
+
+  String _shiftTime(WorkShift shift) {
+    return '${DateFormat('EEE, MMM d').format(shift.start)}  ${DateFormat('h:mm a').format(shift.start)} - ${DateFormat('h:mm a').format(shift.end)}';
+  }
 }
 
-// ── Employee week row ─────────────────────────────────────────────────────────
+class _ManagerShiftTile extends StatelessWidget {
+  final WorkShift shift;
+  final String employeeName;
+  final VoidCallback onEdit;
+  final VoidCallback onDuplicate;
 
-class _EmployeeRow extends StatelessWidget {
-  final Employee employee;
-  final List<Shift> shifts;
-  final DateTime weekStart;
-  const _EmployeeRow(
-      {required this.employee,
-      required this.shifts,
-      required this.weekStart});
+  const _ManagerShiftTile({
+    required this.shift,
+    required this.employeeName,
+    required this.onEdit,
+    required this.onDuplicate,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final timeFmt = DateFormat('E h:mm a');
-    final endFmt = DateFormat('h:mm a');
-
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.cardBorder, width: 0.5),
+        color: AppColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              _Avatar(employee: employee),
-              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(employee.name,
+                    Text(shift.roleName,
                         style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15)),
-                    Text(employee.role,
-                        style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12)),
+                            color: Colors.white, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(employeeName,
+                        style: const TextStyle(color: AppColors.textSecondary)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${DateFormat('h:mm a').format(shift.start)} - ${DateFormat('h:mm a').format(shift.end)}',
+                      style: const TextStyle(color: AppColors.textSecondary),
+                    ),
                   ],
                 ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('${employee.hoursThisWeek}h',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14)),
-                  if (employee.isClockedIn)
-                    Text('Clocked in',
-                        style: TextStyle(
-                            color: AppColors.success, fontSize: 11)),
+              PopupMenuButton<String>(
+                color: AppColors.surface,
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    onEdit();
+                  } else if (value == 'duplicate') {
+                    onDuplicate();
+                  }
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                      value: 'edit',
+                      child:
+                          Text('Edit', style: TextStyle(color: Colors.white))),
+                  PopupMenuItem(
+                      value: 'duplicate',
+                      child: Text('Duplicate next week',
+                          style: TextStyle(color: Colors.white))),
                 ],
               ),
             ],
           ),
-          if (shifts.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: shifts
-                  .map((s) => Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                              color:
-                                  AppColors.primary.withValues(alpha: 0.3),
-                              width: 0.5),
-                        ),
-                        child: Text(
-                          '${timeFmt.format(s.start)}–${endFmt.format(s.end)}  ·  ${s.role}',
-                          style: const TextStyle(
-                              color: AppColors.primary, fontSize: 11),
-                        ),
-                      ))
-                  .toList(),
-            ),
-          ] else
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text('No shifts this week',
-                  style:
-                      TextStyle(color: AppColors.textMuted, fontSize: 12)),
-            ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(_statusText(shift.status),
+                style: TextStyle(color: _statusColor(shift.status))),
+          ),
         ],
       ),
     );
   }
+
+  String _statusText(ShiftStatus status) {
+    return switch (status) {
+      ShiftStatus.scheduled => 'Scheduled',
+      ShiftStatus.dropRequested => 'Waiting for drop approval',
+      ShiftStatus.open => 'Open for pickup',
+      ShiftStatus.pickupPending => 'Pickup request awaiting approval',
+    };
+  }
+
+  Color _statusColor(ShiftStatus status) {
+    return switch (status) {
+      ShiftStatus.scheduled => AppColors.accent,
+      ShiftStatus.dropRequested => AppColors.warning,
+      ShiftStatus.open => AppColors.primary,
+      ShiftStatus.pickupPending => AppColors.warning,
+    };
+  }
 }
 
-class _Avatar extends StatelessWidget {
-  final Employee employee;
-  const _Avatar({required this.employee});
+class _ApprovalTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String buttonLabel;
+  final VoidCallback onPressed;
+
+  const _ApprovalTile({
+    required this.title,
+    required this.subtitle,
+    required this.buttonLabel,
+    required this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.2),
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: Text(employee.initials,
-                style: const TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13)),
-          ),
-        ),
-        if (employee.isClockedIn)
-          Positioned(
-            right: 0,
-            bottom: 0,
-            child: Container(
-              width: 11,
-              height: 11,
-              decoration: BoxDecoration(
-                color: AppColors.success,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.surface, width: 1.5),
-              ),
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(subtitle,
+                    style: const TextStyle(color: AppColors.textSecondary)),
+              ],
             ),
           ),
-      ],
+          FilledButton(onPressed: onPressed, child: Text(buttonLabel)),
+        ],
+      ),
     );
   }
 }

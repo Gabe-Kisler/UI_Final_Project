@@ -1,139 +1,56 @@
 import '../models/models.dart';
 
-final List<Employee> mockEmployees = [
-  Employee(
-    id: 'e1',
-    name: 'Eli Smith',
-    role: 'Cashier',
-    hourlyRate: 21.20,
-    isClockedIn: false,
-    hoursThisWeek: 38.5,
-  ),
-  Employee(
-    id: 'e2',
-    name: 'George H',
-    role: 'Cashier',
-    hourlyRate: 18.50,
-    isClockedIn: false,
-    hoursThisWeek: 32.0,
-  ),
-  Employee(
-    id: 'e3',
-    name: 'Kim L',
-    role: 'Warehouse',
-    hourlyRate: 22.00,
-    isClockedIn: true,
-    hoursThisWeek: 41.5,
-  ),
-  Employee(
-    id: 'e4',
-    name: 'Jimmy T',
-    role: 'Support',
-    hourlyRate: 19.75,
-    isClockedIn: true,
-    hoursThisWeek: 35.0,
-  ),
+const List<StateTaxProfile> usStates = [
+  StateTaxProfile(code: 'AL', name: 'Alabama', withholdingRate: 0.05),
+  StateTaxProfile(code: 'AK', name: 'Alaska', withholdingRate: 0.00),
+  StateTaxProfile(code: 'AZ', name: 'Arizona', withholdingRate: 0.025),
+  StateTaxProfile(code: 'AR', name: 'Arkansas', withholdingRate: 0.049),
+  StateTaxProfile(code: 'CA', name: 'California', withholdingRate: 0.06),
+  StateTaxProfile(code: 'CO', name: 'Colorado', withholdingRate: 0.044),
+  StateTaxProfile(code: 'CT', name: 'Connecticut', withholdingRate: 0.05),
+  StateTaxProfile(code: 'DE', name: 'Delaware', withholdingRate: 0.052),
+  StateTaxProfile(code: 'FL', name: 'Florida', withholdingRate: 0.00),
+  StateTaxProfile(code: 'GA', name: 'Georgia', withholdingRate: 0.053),
+  StateTaxProfile(code: 'HI', name: 'Hawaii', withholdingRate: 0.055),
+  StateTaxProfile(code: 'ID', name: 'Idaho', withholdingRate: 0.058),
+  StateTaxProfile(code: 'IL', name: 'Illinois', withholdingRate: 0.05),
+  StateTaxProfile(code: 'IN', name: 'Indiana', withholdingRate: 0.0315),
+  StateTaxProfile(code: 'IA', name: 'Iowa', withholdingRate: 0.048),
+  StateTaxProfile(code: 'KS', name: 'Kansas', withholdingRate: 0.052),
+  StateTaxProfile(code: 'KY', name: 'Kentucky', withholdingRate: 0.04),
+  StateTaxProfile(code: 'LA', name: 'Louisiana', withholdingRate: 0.0425),
+  StateTaxProfile(code: 'ME', name: 'Maine', withholdingRate: 0.05),
+  StateTaxProfile(code: 'MD', name: 'Maryland', withholdingRate: 0.0475),
+  StateTaxProfile(code: 'MA', name: 'Massachusetts', withholdingRate: 0.05),
+  StateTaxProfile(code: 'MI', name: 'Michigan', withholdingRate: 0.0425),
+  StateTaxProfile(code: 'MN', name: 'Minnesota', withholdingRate: 0.055),
+  StateTaxProfile(code: 'MS', name: 'Mississippi', withholdingRate: 0.047),
+  StateTaxProfile(code: 'MO', name: 'Missouri', withholdingRate: 0.045),
+  StateTaxProfile(code: 'MT', name: 'Montana', withholdingRate: 0.051),
+  StateTaxProfile(code: 'NE', name: 'Nebraska', withholdingRate: 0.051),
+  StateTaxProfile(code: 'NV', name: 'Nevada', withholdingRate: 0.00),
+  StateTaxProfile(code: 'NH', name: 'New Hampshire', withholdingRate: 0.00),
+  StateTaxProfile(code: 'NJ', name: 'New Jersey', withholdingRate: 0.055),
+  StateTaxProfile(code: 'NM', name: 'New Mexico', withholdingRate: 0.049),
+  StateTaxProfile(code: 'NY', name: 'New York', withholdingRate: 0.06),
+  StateTaxProfile(code: 'NC', name: 'North Carolina', withholdingRate: 0.045),
+  StateTaxProfile(code: 'ND', name: 'North Dakota', withholdingRate: 0.02),
+  StateTaxProfile(code: 'OH', name: 'Ohio', withholdingRate: 0.038),
+  StateTaxProfile(code: 'OK', name: 'Oklahoma', withholdingRate: 0.04),
+  StateTaxProfile(code: 'OR', name: 'Oregon', withholdingRate: 0.065),
+  StateTaxProfile(code: 'PA', name: 'Pennsylvania', withholdingRate: 0.0307),
+  StateTaxProfile(code: 'RI', name: 'Rhode Island', withholdingRate: 0.05),
+  StateTaxProfile(code: 'SC', name: 'South Carolina', withholdingRate: 0.047),
+  StateTaxProfile(code: 'SD', name: 'South Dakota', withholdingRate: 0.00),
+  StateTaxProfile(code: 'TN', name: 'Tennessee', withholdingRate: 0.00),
+  StateTaxProfile(code: 'TX', name: 'Texas', withholdingRate: 0.00),
+  StateTaxProfile(code: 'UT', name: 'Utah', withholdingRate: 0.0485),
+  StateTaxProfile(code: 'VT', name: 'Vermont', withholdingRate: 0.052),
+  StateTaxProfile(code: 'VA', name: 'Virginia', withholdingRate: 0.0475),
+  StateTaxProfile(code: 'WA', name: 'Washington', withholdingRate: 0.00),
+  StateTaxProfile(code: 'WV', name: 'West Virginia', withholdingRate: 0.047),
+  StateTaxProfile(code: 'WI', name: 'Wisconsin', withholdingRate: 0.05),
+  StateTaxProfile(code: 'WY', name: 'Wyoming', withholdingRate: 0.00),
+  StateTaxProfile(
+      code: 'DC', name: 'District of Columbia', withholdingRate: 0.055),
 ];
-
-List<Shift> get mockShifts {
-  final now = DateTime.now();
-  return [
-    Shift(
-      id: 's1',
-      role: 'Cashier',
-      start: DateTime(now.year, now.month, now.day, 17, 0),
-      end: DateTime(now.year, now.month, now.day, 22, 0),
-      employeeId: 'e1',
-    ),
-    Shift(
-      id: 's2',
-      role: 'Warehouse',
-      start: DateTime(now.year, now.month, now.day + 2, 15, 0),
-      end: DateTime(now.year, now.month, now.day + 2, 22, 0),
-      employeeId: 'e1',
-    ),
-    Shift(
-      id: 's3',
-      role: 'Cashier',
-      start: DateTime(now.year, now.month, now.day + 3, 9, 0),
-      end: DateTime(now.year, now.month, now.day + 3, 17, 0),
-      employeeId: 'e1',
-    ),
-    Shift(
-      id: 's4',
-      role: 'Cashier',
-      start: DateTime(now.year, now.month, now.day + 4, 17, 0),
-      end: DateTime(now.year, now.month, now.day + 4, 22, 0),
-      employeeId: 'e1',
-    ),
-    Shift(
-      id: 's5',
-      role: 'Cashier',
-      start: DateTime(now.year, now.month, now.day, 9, 0),
-      end: DateTime(now.year, now.month, now.day, 15, 0),
-      employeeId: 'e2',
-    ),
-    Shift(
-      id: 's6',
-      role: 'Warehouse',
-      start: DateTime(now.year, now.month, now.day, 8, 0),
-      end: DateTime(now.year, now.month, now.day, 16, 0),
-      employeeId: 'e3',
-    ),
-    Shift(
-      id: 's7',
-      role: 'Support',
-      start: DateTime(now.year, now.month, now.day, 12, 0),
-      end: DateTime(now.year, now.month, now.day, 20, 0),
-      employeeId: 'e4',
-    ),
-  ];
-}
-
-final List<ShiftAlert> mockAlerts = [
-  ShiftAlert(
-    message: 'George H missed 4:00pm clock-in',
-    subtitle: '8 minutes ago',
-    type: AlertType.missedClockIn,
-  ),
-  ShiftAlert(
-    message: 'Kim L crossed OT threshold',
-    subtitle: '45 minutes ago',
-    type: AlertType.overtime,
-  ),
-  ShiftAlert(
-    message: 'Shift swap request — Gabe ↔ Jimmy',
-    subtitle: '2h ago',
-    type: AlertType.swapRequest,
-  ),
-];
-
-final List<ShiftGap> mockShiftGaps = [
-  ShiftGap(
-    role: 'Cashier',
-    timeRange: 'Tonight 4–10 PM',
-    reason: 'George H no show — uncovered',
-  ),
-  ShiftGap(
-    role: 'Warehouse',
-    timeRange: 'Sat 8 AM – 2 PM',
-    reason: 'Swap pending approval – 1 offer',
-  ),
-  ShiftGap(
-    role: 'Support',
-    timeRange: 'Sun 12–6 PM',
-    reason: 'Understaffed',
-  ),
-];
-
-PayPeriod get mockPayPeriod {
-  final now = DateTime.now();
-  return PayPeriod(
-    start: DateTime(now.year, now.month, 1),
-    end: DateTime(now.year, now.month, 15),
-    expectedPay: 1468.88,
-    pendingPay: 826.00,
-  );
-}
-
-const List<double> weeklyLaborCost = [580, 620, 750, 490, 680, 710, 482];
