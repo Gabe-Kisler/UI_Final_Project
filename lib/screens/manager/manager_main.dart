@@ -54,4 +54,3 @@ class _ManagerMainState extends State<ManagerMain> {
     );
   }
 }
-

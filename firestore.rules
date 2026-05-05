@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function currentUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isManager() {
+      return isSignedIn() && currentUser().data.role == 'manager';
+    }
+
+    function isSameTeam(teamId) {
+      return isSignedIn() && currentUser().data.teamId == teamId;
+    }
+
+    function isInvitee(email) {
+      return isSignedIn() &&
+        request.auth.token.email != null &&
+        request.auth.token.email == email;
+    }
+
+    match /users/{uid} {
+      allow read: if isSelf(uid) || (isManager() && isSameTeam(resource.data.teamId));
+
+      allow create: if isSelf(uid);
+
+      allow update: if (
+          isSelf(uid) &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.teamId == resource.data.teamId &&
+          request.resource.data.hourlyRate == resource.data.hourlyRate &&
+          request.resource.data.pinHash == resource.data.pinHash
+        ) || (
+          isManager() &&
+          isSameTeam(resource.data.teamId)
+        );
+
+      allow delete: if false;
+    }
+
+    match /teams/{teamId} {
+      allow read: if isSameTeam(teamId);
+      allow create: if isSignedIn() && request.resource.data.ownerUserId == request.auth.uid;
+      allow update: if isManager() && isSameTeam(teamId);
+      allow delete: if false;
+    }
+
+    match /invites/{inviteId} {
+      allow read: if
+        (isManager() && isSameTeam(resource.data.teamId)) ||
+        isInvitee(resource.data.email);
+      allow create: if isManager() && isSameTeam(request.resource.data.teamId);
+      allow update: if
+        (isManager() && isSameTeam(resource.data.teamId)) ||
+        (
+          isInvitee(resource.data.email) &&
+          resource.data.status == 'pending' &&
+          request.resource.data.teamId == resource.data.teamId &&
+          request.resource.data.email == resource.data.email &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.invitedByUserId == resource.data.invitedByUserId &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.status == 'accepted' &&
+          request.resource.data.acceptedByUserId == request.auth.uid
+        );
+      allow delete: if false;
+    }
+
+    match /shifts/{shiftId} {
+      allow read: if isSameTeam(resource.data.teamId);
+      allow create, delete: if isManager() && isSameTeam(request.resource.data.teamId);
+
+      allow update: if (
+          isManager() &&
+          isSameTeam(resource.data.teamId)
+        ) || (
+          isSelf(resource.data.assignedUserId) &&
+          isSameTeam(resource.data.teamId) &&
+          request.resource.data.assignedUserId == resource.data.assignedUserId &&
+          request.resource.data.teamId == resource.data.teamId
+        );
+    }
+
+    match /timeEntries/{timeEntryId} {
+      allow read: if isSelf(resource.data.userId) || (isManager() && isSameTeam(resource.data.teamId));
+
+      allow create: if
+        isSignedIn() &&
+        request.resource.data.userId == request.auth.uid &&
+        isSameTeam(request.resource.data.teamId);
+
+      allow update: if
+        isSelf(resource.data.userId) ||
+        (isManager() && isSameTeam(resource.data.teamId));
+
+      allow delete: if false;
+    }
+
+    match /mail/{mailId} {
+      allow read, write: if false;
+    }
+  }
+}

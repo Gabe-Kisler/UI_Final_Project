@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../../app_scope.dart';
 import '../../theme/app_theme.dart';
-import '../../data/mock_data.dart';
 
 class EmployeePay extends StatelessWidget {
   const EmployeePay({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final pay = mockPayPeriod;
-    final fmt = DateFormat('MMM d');
-    final daysLeft = pay.end.difference(DateTime.now()).inDays.clamp(0, 99);
+    final controller = ShiftSyncScope.of(context);
+    final user = controller.currentUser!;
+    final preview = controller.paycheckForUser(user.id);
+    final periodStart = controller.payPeriodStart();
+    final periodEnd = periodStart.add(const Duration(days: 14));
+    final taxProfile = controller.taxProfileFor(user.stateCode);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -20,105 +24,122 @@ class EmployeePay extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Pay',
+              const Text('Pay Preview',
                   style: TextStyle(
                       color: Colors.white,
                       fontSize: 24,
                       fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
-              // Current period card
-              _Card(
+              _PayCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        _Label('CURRENT PAY PERIOD'),
+                        const Text('Current Pay Period',
+                            style: TextStyle(
+                                color: AppColors.accent,
+                                fontWeight: FontWeight.w700)),
                         const Spacer(),
                         Text(
-                          '${fmt.format(pay.start)} – ${fmt.format(pay.end)}',
-                          style: TextStyle(
-                              color: AppColors.textSecondary, fontSize: 12),
+                          '${DateFormat('MMM d').format(periodStart)} - ${DateFormat('MMM d').format(periodEnd)}',
+                          style:
+                              const TextStyle(color: AppColors.textSecondary),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '\$${pay.expectedPay.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 42,
-                          fontWeight: FontWeight.bold),
-                    ),
-                    Text('Expected payout',
-                        style: TextStyle(
-                            color: AppColors.textSecondary, fontSize: 13)),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
+                    Text('\$${preview.netPay.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 40,
+                            fontWeight: FontWeight.bold)),
+                    const Text('Estimated take-home pay',
+                        style: TextStyle(color: AppColors.textSecondary)),
+                    const SizedBox(height: 18),
                     Row(
                       children: [
-                        _PayStat(
-                            label: 'Pending',
+                        Expanded(
+                          child: _MiniMetric(
+                            label: 'Regular hours',
                             value:
-                                '\$${pay.pendingPay.toStringAsFixed(2)}'),
-                        const SizedBox(width: 24),
-                        _PayStat(
-                            label: 'Days remaining',
-                            value: '$daysLeft days'),
+                                '${preview.regularHours.toStringAsFixed(1)}h',
+                          ),
+                        ),
+                        Expanded(
+                          child: _MiniMetric(
+                            label: 'Overtime',
+                            value:
+                                '${preview.overtimeHours.toStringAsFixed(1)}h',
+                          ),
+                        ),
+                        Expanded(
+                          child: _MiniMetric(
+                            label: 'State',
+                            value: user.stateCode,
+                          ),
+                        ),
+                        Expanded(
+                          child: _MiniMetric(
+                            label: 'Hourly rate',
+                            value: user.hourlyRate > 0
+                                ? '\$${user.hourlyRate.toStringAsFixed(2)}'
+                                : 'Pending',
+                          ),
+                        ),
                       ],
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              // Breakdown
-              _Card(
+              _PayCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _Label('PAY BREAKDOWN'),
+                    const Text('Payroll Breakdown',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold)),
                     const SizedBox(height: 14),
+                    _BreakdownRow(label: 'Gross pay', value: preview.grossPay),
                     _BreakdownRow(
-                        label: 'Regular (38.5 h)',
-                        rate: '\$21.20/hr',
-                        value: '\$816.20'),
-                    _Divider(),
+                        label: 'Federal withholding',
+                        value: -preview.federalWithholding),
                     _BreakdownRow(
-                        label: 'Overtime (0 h)',
-                        rate: '\$31.80/hr',
-                        value: '\$0.00'),
-                    _Divider(),
-                    _BreakdownRow(label: 'Tips', rate: '', value: '\$9.80'),
-                    _Divider(),
+                      label: 'State withholding (${taxProfile.name})',
+                      value: -preview.stateWithholding,
+                    ),
                     _BreakdownRow(
-                        label: 'Total',
-                        rate: '',
-                        value: '\$826.00',
-                        bold: true),
+                        label: 'FICA', value: -preview.ficaWithholding),
+                    const Divider(color: AppColors.cardBorder),
+                    _BreakdownRow(
+                        label: 'Estimated net pay',
+                        value: preview.netPay,
+                        emphasize: true),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              // History
-              _Card(
+              const _PayCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _Label('PAY HISTORY'),
-                    const SizedBox(height: 14),
-                    _HistoryTile(
-                        period: 'Mar 16 – Mar 31',
-                        amount: '\$1,243.60'),
-                    _HistoryTile(
-                        period: 'Mar 1 – Mar 15',
-                        amount: '\$1,108.40'),
-                    _HistoryTile(
-                        period: 'Feb 16 – Feb 28',
-                        amount: '\$987.20',
-                        isLast: true),
+                  children: <Widget>[
+                    Text('How this is calculated',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold)),
+                    SizedBox(height: 12),
+                    Text(
+                      'Take-home pay updates from your scheduled hours, overtime, federal withholding, FICA, the manager-assigned hourly rate, and the state selected on your account. Edit your state in Profile if your withholding location changes.',
+                      style: TextStyle(
+                          color: AppColors.textSecondary, height: 1.5),
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
             ],
           ),
         ),
@@ -127,138 +148,86 @@ class EmployeePay extends StatelessWidget {
   }
 }
 
-// ── Local widgets ────────────────────────────────────────────────────────────
-
-class _Card extends StatelessWidget {
+class _PayCard extends StatelessWidget {
   final Widget child;
-  const _Card({required this.child});
-  @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.cardBorder, width: 0.5),
-        ),
-        child: child,
-      );
-}
 
-class _Label extends StatelessWidget {
-  final String text;
-  const _Label(this.text);
-  @override
-  Widget build(BuildContext context) => Text(text,
-      style: const TextStyle(
-          color: AppColors.accent,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.1));
-}
-
-class _PayStat extends StatelessWidget {
-  final String label;
-  final String value;
-  const _PayStat({required this.label, required this.value});
-  @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style:
-                  TextStyle(color: AppColors.textMuted, fontSize: 11)),
-          Text(value,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15)),
-        ],
-      );
-}
-
-class _Divider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) =>
-      const Divider(color: AppColors.cardBorder, height: 20);
-}
-
-class _BreakdownRow extends StatelessWidget {
-  final String label;
-  final String rate;
-  final String value;
-  final bool bold;
-  const _BreakdownRow(
-      {required this.label,
-      required this.rate,
-      required this.value,
-      this.bold = false});
+  const _PayCard({required this.child});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _MiniMetric extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _MiniMetric({
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style: TextStyle(
-                      color: bold ? Colors.white : AppColors.textSecondary,
-                      fontWeight:
-                          bold ? FontWeight.bold : FontWeight.normal,
-                      fontSize: 14)),
-              if (rate.isNotEmpty)
-                Text(rate,
-                    style: TextStyle(
-                        color: AppColors.textMuted, fontSize: 11)),
-            ],
-          ),
-        ),
+        Text(label, style: const TextStyle(color: AppColors.textMuted)),
+        const SizedBox(height: 6),
         Text(value,
-            style: TextStyle(
-                color: Colors.white,
-                fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-                fontSize: bold ? 16 : 14)),
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold)),
       ],
     );
   }
 }
 
-class _HistoryTile extends StatelessWidget {
-  final String period;
-  final String amount;
-  final bool isLast;
-  const _HistoryTile(
-      {required this.period, required this.amount, this.isLast = false});
+class _BreakdownRow extends StatelessWidget {
+  final String label;
+  final double value;
+  final bool emphasize;
+
+  const _BreakdownRow({
+    required this.label,
+    required this.value,
+    this.emphasize = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final formatted = NumberFormat.currency(symbol: '\$').format(value);
+
     return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(period,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500)),
-                const SizedBox(height: 2),
-                Text('Paid',
-                    style: TextStyle(
-                        color: AppColors.success, fontSize: 11)),
-              ],
+            child: Text(
+              label,
+              style: TextStyle(
+                color: emphasize ? Colors.white : AppColors.textSecondary,
+                fontWeight: emphasize ? FontWeight.bold : FontWeight.normal,
+              ),
             ),
           ),
-          Text(amount,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14)),
+          Text(
+            formatted,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: emphasize ? FontWeight.bold : FontWeight.w600,
+              fontSize: emphasize ? 18 : 15,
+            ),
+          ),
         ],
       ),
     );
