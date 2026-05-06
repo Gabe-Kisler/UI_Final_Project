@@ -392,6 +392,9 @@ class AppController extends ChangeNotifier {
       final settings = ActionCodeSettings(
         url: linkUrl,
         handleCodeInApp: true,
+        androidPackageName: 'com.shiftsync.shiftsync',
+        androidInstallApp: true,
+        iOSBundleId: 'com.shiftsync.shiftsync',
       );
 
       await _auth.sendSignInLinkToEmail(
@@ -402,6 +405,8 @@ class AppController extends ChangeNotifier {
       return null;
     } on FirebaseAuthException catch (error) {
       return error.message ?? 'Unable to send invite email.';
+    } catch (error) {
+      return 'Unexpected error sending invite: $error';
     } finally {
       _setBusy(false);
     }

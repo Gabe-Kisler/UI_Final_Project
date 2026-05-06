@@ -301,6 +301,7 @@ class _AuthScreenState extends State<AuthScreen> {
           controller: _emailLinkEmail,
           keyboardType: TextInputType.emailAddress,
           decoration: _inputDecoration('Invited email address'),
+          onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 18),
         SizedBox(
